@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loyalty Leaderboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #FFD700; --silver: #C0C0C0; --bronze: #CD7F32;
+    --bg: #0a0a0f; --surface: #13131a; --surface2: #1c1c27;
+    --accent: #7B5EA7; --accent2: #a67fd4;
+    --text: #f0edf8; --muted: #7a768a; --green: #4ade80; --red: #f87171;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(123,94,167,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(166,127,212,0.08) 0%, transparent 50%);
+    animation: bgPulse 8s ease-in-out infinite alternate; z-index: 0; pointer-events: none;
+  }
+  @keyframes bgPulse { from { transform: scale(1) rotate(0deg); } to { transform: scale(1.05) rotate(2deg); } }
+  .container { position: relative; z-index: 1; max-width: 820px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  .header { text-align: center; margin-bottom: 40px; animation: fadeDown 0.6s ease both; }
+  .store-name { font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: var(--accent2); margin-bottom: 10px; font-weight: 500; }
+  .header h1 { font-family: 'Bebas Neue', sans-serif; font-size: clamp(52px, 10vw, 88px); letter-spacing: 4px; line-height: 0.95; background: linear-gradient(135deg, #fff 0%, var(--accent2) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 12px; }
+  .date-range { font-size: 13px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 56px; margin-bottom: 16px; opacity: 0.4; }
+  .empty-state h2 { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px; color: var(--muted); margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; opacity: 0.6; line-height: 1.6; }
+
+  .summary { display: flex; justify-content: center; gap: 40px; margin-bottom: 36px; }
+  .stat { text-align: center; }
+  .stat-value { font-family: 'Bebas Neue', sans-serif; font-size: 36px; color: var(--accent2); letter-spacing: 2px; }
+  .stat-label { font-size: 11px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+  .divider { width: 1px; background: rgba(255,255,255,0.08); align-self: stretch; }
+
+  .podium { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 32px; align-items: end; }
+  .podium-card { border-radius: 16px; padding: 24px 16px; text-align: center; position: relative; overflow: hidden; cursor: default; transition: transform 0.3s ease; }
+  .podium-card:hover { transform: translateY(-4px); }
+  .podium-card::before { content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 1.5px; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+  .podium-1 { background: linear-gradient(160deg, rgba(255,215,0,0.18) 0%, rgba(255,215,0,0.04) 100%); padding-top: 32px; order: 2; }
+  .podium-1::before { background: linear-gradient(135deg, var(--gold), transparent 60%); }
+  .podium-2 { background: linear-gradient(160deg, rgba(192,192,192,0.14) 0%, rgba(192,192,192,0.03) 100%); order: 1; }
+  .podium-2::before { background: linear-gradient(135deg, var(--silver), transparent 60%); }
+  .podium-3 { background: linear-gradient(160deg, rgba(205,127,50,0.14) 0%, rgba(205,127,50,0.03) 100%); order: 3; }
+  .podium-3::before { background: linear-gradient(135deg, var(--bronze), transparent 60%); }
+  .medal { font-size: 36px; margin-bottom: 10px; display: block; filter: drop-shadow(0 4px 12px rgba(255,215,0,0.3)); }
+  .podium-rank { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 3px; color: var(--muted); margin-bottom: 4px; }
+  .podium-name { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: var(--text); line-height: 1.2; }
+  .podium-amount { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 1px; }
+  .podium-1 .podium-amount { color: var(--gold); }
+  .podium-2 .podium-amount { color: var(--silver); }
+  .podium-3 .podium-amount { color: var(--bronze); }
+  .podium-bar { height: 6px; border-radius: 3px; margin: 12px auto 0; width: 60%; }
+  .podium-1 .podium-bar { background: linear-gradient(90deg, var(--gold), #fff8a0); }
+  .podium-2 .podium-bar { background: linear-gradient(90deg, var(--silver), #e8e8e8); }
+  .podium-3 .podium-bar { background: linear-gradient(90deg, var(--bronze), #e8a064); }
+
+  .section-label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; padding-left: 4px; }
+  .leaderboard { display: flex; flex-direction: column; gap: 6px; }
+  .row { display: flex; align-items: center; gap: 16px; background: var(--surface); border-radius: 12px; padding: 14px 20px; border: 1px solid rgba(255,255,255,0.04); transition: all 0.25s ease; position: relative; overflow: hidden; }
+  .row:hover { background: var(--surface2); border-color: rgba(123,94,167,0.3); transform: translateX(4px); }
+  .row::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: 0; transition: opacity 0.25s; border-radius: 0 2px 2px 0; }
+  .row:hover::after { opacity: 1; }
+  .row-rank { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: var(--muted); width: 30px; text-align: center; flex-shrink: 0; }
+  .row-name { flex: 1; font-size: 15px; font-weight: 500; }
+  .row-bar-wrap { flex: 2; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+  .row-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 1s ease; }
+  .row-amount { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: var(--green); letter-spacing: 1px; width: 100px; text-align: right; flex-shrink: 0; }
+
+  .upload-section { margin-top: 60px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 40px; }
+  .upload-label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; display: block; }
+  .drop-zone { border: 2px dashed rgba(123,94,167,0.4); border-radius: 16px; padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: rgba(123,94,167,0.04); position: relative; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent2); background: rgba(123,94,167,0.1); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.6; }
+  .drop-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 3px; color: var(--accent2); margin-bottom: 6px; }
+  .drop-sub { font-size: 13px; color: var(--muted); }
+  .drop-hint { font-size: 11px; color: var(--muted); margin-top: 8px; opacity: 0.6; letter-spacing: 1px; }
+
+  .history-section { margin-top: 24px; }
+  .history-label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; display: block; }
+  .history-list { display: flex; flex-direction: column; gap: 6px; }
+  .history-item { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 10px; padding: 10px 16px; border: 1px solid rgba(255,255,255,0.04); font-size: 13px; }
+  .hi-icon { font-size: 16px; flex-shrink: 0; }
+  .hi-name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hi-date { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .hi-rows { color: var(--green); font-size: 12px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; flex-shrink: 0; }
+  .hi-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 6px; transition: all 0.2s; flex-shrink: 0; }
+  .hi-remove:hover { color: var(--red); background: rgba(248,113,113,0.1); }
+  .reset-btn { display: block; margin: 20px auto 0; background: none; border: 1px solid rgba(248,113,113,0.3); color: var(--red); font-family: 'DM Sans', sans-serif; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; padding: 8px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+  .reset-btn:hover { background: rgba(248,113,113,0.08); border-color: var(--red); }
+
+  .toast { position: fixed; bottom: 32px; right: 32px; background: var(--surface2); border: 1px solid rgba(123,94,167,0.4); border-radius: 12px; padding: 14px 20px; font-size: 14px; color: var(--text); transform: translateY(80px); opacity: 0; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 100; max-width: 340px; line-height: 1.5; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: rgba(248,113,113,0.4); color: var(--red); }
+
+  footer { text-align: center; margin-top: 48px; color: var(--muted); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.5; }
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(16px); }  to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <p class="store-name">The Travel Agency · Downtown Brooklyn</p>
+    <h1>Loyalty<br>Leaderboard</h1>
+    <p class="date-range" id="dateRange">No data uploaded yet</p>
+  </div>
+
+  <div id="mainContent">
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <h2>No Data Yet</h2>
+      <p>Upload your daily Discount Detail Report below to get started.<br>Each file you add will be combined into the running totals.</p>
+    </div>
+  </div>
+
+  <div class="upload-section">
+    <span class="upload-label">📤 &nbsp;Upload Daily Discount Detail Report</span>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+      <div class="drop-icon">📊</div>
+      <div class="drop-title">Drop XLSX Here</div>
+      <div class="drop-sub">or click to browse — each upload adds to the running totals</div>
+      <div class="drop-hint">Export: Discount Detail Report · Columns used: Budtender Name · Discount Name · Unit Price</div>
+    </div>
+
+    <div class="history-section" id="historySection" style="display:none">
+      <span class="history-label">📁 &nbsp;Uploaded Files</span>
+      <div class="history-list" id="historyList"></div>
+      <button class="reset-btn" onclick="resetAll()">⚠ Reset All Data</button>
+    </div>
+  </div>
+
+  <footer>Loyalty · Rewards · Travel Club &nbsp;·&nbsp; Excludes Travel Club Frequent Flyer</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const STORE_KEY = 'loyaltyLeaderboard_v2';
+
+// ── Column names for Discount Detail Report (hardcoded — confirmed from file)
+const COL_BUDTENDER    = 'Budtender Name';
+const COL_DISCOUNT     = 'Discount Name';
+const COL_AMOUNT       = 'Unit Price';
+const HEADER_ROW       = 4; // 0-indexed row where headers live
+
+function loadState() {
+  try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : { totals: {}, files: [] }; }
+  catch { return { totals: {}, files: [] }; }
+}
+function saveState(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+
+function isLoyalty(name) {
+  if (!name || typeof name !== 'string') return false;
+  const n = name.toLowerCase().trim();
+  if (n.includes('travel club frequent flyer')) return false;
+  return n.includes('loyalty') || n.includes('reward') || n.includes('travel club');
+}
+
+function clean(val) {
+  if (val === null || val === undefined) return '';
+  return String(val).trim();
+}
+
+function parseXLSX(buf) {
+  const wb = XLSX.read(buf, { type: 'array', raw: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, blankrows: true });
+
+  // Find the header row by looking for COL_BUDTENDER anywhere in the sheet
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(raw.length, 15); i++) {
+    if (raw[i].some(c => clean(c) === COL_BUDTENDER)) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) {
+    // Fallback: try row 4 (known position)
+    if (raw[HEADER_ROW] && raw[HEADER_ROW].some(c => clean(c).toLowerCase().includes('budtender'))) {
+      headerIdx = HEADER_ROW;
+    } else {
+      const found = raw.slice(0, 8).map((r, i) =>
+        `Row ${i}: ${r.filter(c => clean(c)).slice(0, 5).map(c => JSON.stringify(clean(c))).join(', ')}`
+      ).join('\n');
+      throw new Error(`This doesn't look like a Discount Detail Report.\n\nMake sure you're exporting the "Discount Detail Report" from your POS.\n\nFile preview:\n${found}`);
+    }
+  }
+
+  const headerRow = raw[headerIdx];
+
+  // Map column names to indices
+  const colMap = {};
+  headerRow.forEach((h, i) => { if (clean(h)) colMap[clean(h)] = i; });
+
+  const bIdx = colMap[COL_BUDTENDER];
+  const dIdx = colMap[COL_DISCOUNT];
+  const aIdx = colMap[COL_AMOUNT];
+
+  if (bIdx === undefined || dIdx === undefined || aIdx === undefined) {
+    const found = Object.keys(colMap).join(', ');
+    throw new Error(`Missing expected columns.\nNeed: "${COL_BUDTENDER}", "${COL_DISCOUNT}", "${COL_AMOUNT}"\nFound: ${found}`);
+  }
+
+  const budtenderTotals = {};
+  let rowCount = 0;
+
+  for (let i = headerIdx + 1; i < raw.length; i++) {
+    const row = raw[i];
+    if (!row || row.every(c => clean(c) === '')) continue;
+
+    const budtender    = clean(row[bIdx]);
+    const discountName = clean(row[dIdx]);
+    const rawAmt       = row[aIdx];
+    const amt          = typeof rawAmt === 'number' ? rawAmt
+                       : parseFloat(clean(String(rawAmt)).replace(/[$,]/g, '')) || 0;
+
+    if (!budtender) continue;
+    if (budtender.toUpperCase().includes('DTBK')) continue;
+    if (!isLoyalty(discountName)) continue;
+    if (amt <= 0) continue;
+
+    budtenderTotals[budtender] = (budtenderTotals[budtender] || 0) + amt;
+    rowCount++;
+  }
+
+  return { budtenderTotals, rowCount };
+}
+
+function fmt(n) { return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+function render(state) {
+  const entries = Object.entries(state.totals).sort((a, b) => b[1] - a[1]);
+  const main = document.getElementById('mainContent');
+
+  if (entries.length === 0) {
+    main.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h2>No Data Yet</h2><p>Upload your daily Discount Detail Report below to get started.<br>Each file you add will be combined into the running totals.</p></div>`;
+    document.getElementById('dateRange').textContent = 'No data uploaded yet';
+    return;
+  }
+
+  const totalSales = entries.reduce((s, [, v]) => s + v, 0);
+  const avg = totalSales / entries.length;
+  const maxAmt = entries[0][1];
+
+  const dates = state.files.map(f => new Date(f.uploaded));
+  const earliest = new Date(Math.min(...dates));
+  const latest   = new Date(Math.max(...dates));
+  const fd = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('dateRange').textContent =
+    earliest.toDateString() === latest.toDateString() ? fd(earliest) : `${fd(earliest)} – ${fd(latest)}`;
+
+  const top3 = entries.slice(0, 3);
+  const rest  = entries.slice(3);
+
+  let html = `<div class="summary">
+    <div class="stat"><div class="stat-value">${entries.length}</div><div class="stat-label">Budtenders</div></div>
+    <div class="divider"></div>
+    <div class="stat"><div class="stat-value">${fmt(totalSales)}</div><div class="stat-label">Total Loyalty Sales</div></div>
+    <div class="divider"></div>
+    <div class="stat"><div class="stat-value">${fmt(avg)}</div><div class="stat-label">Avg Per Budtender</div></div>
+  </div>`;
+
+  if (top3.length > 0) {
+    const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]]
+                      : top3.length === 2 ? [top3[1], top3[0]] : [top3[0]];
+    const cls    = ['podium-2','podium-1','podium-3'];
+    const medals = ['🥈','🥇','🥉'];
+    const places = ['2nd Place','1st Place','3rd Place'];
+    html += `<div class="podium">`;
+    podiumOrder.forEach((entry, i) => {
+      html += `<div class="podium-card ${cls[i]}">
+        <span class="medal">${medals[i]}</span>
+        <div class="podium-rank">${places[i]}</div>
+        <div class="podium-name">${entry[0]}</div>
+        <div class="podium-amount">${fmt(entry[1])}</div>
+        <div class="podium-bar"></div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (rest.length > 0) {
+    html += `<p class="section-label">Rankings — 4th and below</p><div class="leaderboard">`;
+    rest.forEach(([name, amt], i) => {
+      const pct = (amt / maxAmt * 100).toFixed(1);
+      html += `<div class="row">
+        <span class="row-rank">${i + 4}</span>
+        <span class="row-name">${name}</span>
+        <div class="row-bar-wrap"><div class="row-bar" style="width:0%" data-width="${pct}%"></div></div>
+        <span class="row-amount">${fmt(amt)}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  main.innerHTML = html;
+  setTimeout(() => { document.querySelectorAll('.row-bar').forEach(b => b.style.width = b.dataset.width); }, 100);
+}
+
+function renderHistory(state) {
+  const section = document.getElementById('historySection');
+  const list    = document.getElementById('historyList');
+  if (state.files.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = state.files.map((f, i) => `
+    <div class="history-item">
+      <span class="hi-icon">📄</span>
+      <span class="hi-name">${f.name}</span>
+      <span class="hi-rows">${f.rows} rows</span>
+      <span class="hi-date">${new Date(f.uploaded).toLocaleDateString()}</span>
+      <button class="hi-remove" onclick="removeFile(${i})" title="Remove this file">✕</button>
+    </div>`).join('');
+}
+
+function removeFile(i) {
+  const state = loadState();
+  const file  = state.files[i];
+  if (!file) return;
+  Object.entries(file.contribution).forEach(([name, amt]) => {
+    if (state.totals[name] !== undefined) {
+      state.totals[name] = Math.max(0, state.totals[name] - amt);
+      if (state.totals[name] < 0.01) delete state.totals[name];
+    }
+  });
+  state.files.splice(i, 1);
+  saveState(state);
+  render(state);
+  renderHistory(state);
+  showToast(`Removed "${file.name}"`);
+}
+
+function resetAll() {
+  if (!confirm('Reset all data? This cannot be undone.')) return;
+  localStorage.removeItem(STORE_KEY);
+  render({ totals: {}, files: [] });
+  renderHistory({ totals: {}, files: [] });
+  showToast('All data cleared');
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = 'toast', 4500);
+}
+
+function processFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const { budtenderTotals, rowCount } = parseXLSX(e.target.result);
+      if (rowCount === 0) {
+        showToast('❌ No loyalty rows found. Make sure this is the Discount Detail Report and the date range has loyalty/reward/travel club discounts.', true);
+        return;
+      }
+      const state = loadState();
+      // Check for duplicate file
+      if (state.files.some(f => f.name === file.name)) {
+        if (!confirm(`"${file.name}" has already been uploaded. Add it again anyway?`)) return;
+      }
+      Object.entries(budtenderTotals).forEach(([name, amt]) => {
+        state.totals[name] = (state.totals[name] || 0) + amt;
+      });
+      state.files.push({ name: file.name, uploaded: new Date().toISOString(), rows: rowCount, contribution: budtenderTotals });
+      saveState(state);
+      render(state);
+      renderHistory(state);
+      showToast(`✅ Added ${rowCount} loyalty rows from "${file.name}"`);
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) processFile(fileInput.files[0]); fileInput.value = ''; });
+
+const s = loadState();
+render(s);
+renderHistory(s);
+</script>
+</body>
+</html>
